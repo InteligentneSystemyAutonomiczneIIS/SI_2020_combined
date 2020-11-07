@@ -159,15 +159,16 @@ while True:
                 cv2.rectangle(frame, (x, y), ((x+w), (y+h)), (255, 255, 0), thickness=2)
                  
 
-        cv2.imshow("video", frame)
-        cv2.imshow("roi", roi)
-        cv2.imshow("mask", mask)
+    cv2.imshow("video", frame)
+    cv2.imshow("roi", roi)
+    cv2.imshow("mask", mask)
 
 
     # handle keys 
     key = cv2.waitKey(1) & 0xFF
     if key == ord('q'):
         break
+
     elif key == ord('a'):
         avg_h = 0
         avg_s = 0
