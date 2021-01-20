@@ -10,7 +10,7 @@ import cv2
 # GStreamer supported full resolution: (3264, 2464), 21 FPS, FOV: 62 deg H, 48.8 deg V
 # Preferred resolution: (3264,1848), 28FPS, FOV: 62 deg H, 37 deg V
 class JetsonVideoStream:
-	def __init__(self, captureResolution=(3264,1848), outputResolution=(960, 460), frameRate=28, flipMethod=0, 
+	def __init__(self, captureResolution=(3264,1848), outputResolution=(848, 480), frameRate=28, flipMethod=0, 
 						exposureTimeInMiliseconds=None, gain=None, digitalGain=None, whiteBalanceMode=1,
 						name="JetsonVideoStream"):
 		# set up the gstreamer string used to set up the camera on the jetson board

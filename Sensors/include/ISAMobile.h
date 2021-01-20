@@ -13,8 +13,8 @@
  * Silniki, wejście enkoderowe
  *
  */
-#define ENCODER_REAR_LEFT_1	14	// Enkoder lewej strony
-#define ENCODER_REAR_LEFT_2	15	// Enkoder lewej strony
+#define ENCODER_REAR_LEFT_1	15	// Enkoder lewej strony
+#define ENCODER_REAR_LEFT_2	14	// Enkoder lewej strony
 #define ENCODER_REAR_RIGHT_1	16	// Enkoder prawej strony	
 #define ENCODER_REAR_RIGHT_2	17	// Enkoder prawej strony	
 	
@@ -28,13 +28,13 @@
 #define US_MIDDLE_TRIGGER_PIN	11
 #define US_MIDDLE_ECHO_PIN		10
 
-#define US_LEFT					1
-#define US_LEFT_TRIGGER_PIN		24
-#define US_LEFT_ECHO_PIN		12
+#define US_RIGHT				1
+#define US_RIGHT_TRIGGER_PIN	24
+#define US_RIGHT_ECHO_PIN		12
 
-#define US_RIGHT				2
-#define US_RIGHT_TRIGGER_PIN	9
-#define US_RIGHT_ECHO_PIN		8
+#define US_LEFT					2
+#define US_LEFT_TRIGGER_PIN		9
+#define US_LEFT_ECHO_PIN		8
  
 enum UltraSoundSensor {
 	Front = 0,
