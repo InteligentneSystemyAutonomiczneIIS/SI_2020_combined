@@ -23,12 +23,10 @@ dataPacket packet;
 boolean newData = false;
 
 
-float yawRequested = 0;
-float pitchRequested = 0;
+float leftSide = 0;
+float rightSide = 0;
 
 
-float yawErrorAccumulated = 0;
-float pitchErrorAccumulated = 0;
 //============
 
 //============
@@ -95,8 +93,6 @@ void showParsedData(dataPacket packet) {
     Serial.println(packet.second);
 }
 
-
-
 void setup() {
 
     initSerial(115200);
@@ -113,8 +109,6 @@ void setup() {
     initServos();
     centerServos();
 
-    // initESP826();
-    // initLED();
     Brake();
     delay(500);
 
@@ -123,8 +117,6 @@ void setup() {
 }
 
 //============
-
-
 
 void loop() {
       
@@ -138,50 +130,24 @@ void loop() {
         packet = parseData();
         // showParsedData(packet);
 
-        if (strcmp(packet.message, "servo") == 0)
+        if (strcmp(packet.message, "motor") == 0)
         {
             if (isStopped == false)
             {
-                yawRequested = packet.first;
-                pitchRequested = packet.second;
-
-                {
-                    // float yawError = -(yawRequested / (HorizontalFOV/2) );
-                    float yawError = -yawRequested;
-                    float Kp = 25.0f;
-                    float Ki = 4.0f;
-
-                    float output = Kp * yawError + Ki * yawErrorAccumulated;
-                    yawErrorAccumulated += yawError;
-                    
-                    moveServo(ServoSelector::Yaw, (int)(YawCalibrationCenter + output));
-
-                }
-                {
-                    
-                    // float pitchError = -(pitchRequested / (VerticalFOV/2));
-                    float pitchError = - pitchRequested;
-                    float Kp = 15.0f;
-                    float Ki = 3.0f;
-
-                    float output = Kp * pitchError + Ki * pitchErrorAccumulated;
-                    pitchErrorAccumulated += pitchError;
-                    
-                    // move servo
-                    moveServo(ServoSelector::Pitch,  (int)(PitchCalibrationCenter + output));
-                }
-                 
+                leftSide = packet.first;
+                rightSide = packet.second;
             }
-
         }
 
         if (strcmp(packet.message, "stop") == 0)
         {
+            Brake();
             isStopped = true;
         }
 
         if (strcmp(packet.message, "start") == 0)
         {
+            Brake();
             isStopped = false;
         }
 

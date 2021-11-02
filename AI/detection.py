@@ -35,8 +35,8 @@ vs.start()
 time.sleep(2.0)
 
 
-modelPath = 'AI/ssd-mobilenet.onnx'
-labelsPath = 'AI/labels.txt'
+modelPath = './ssd-mobilenet.onnx'
+labelsPath = './labels.txt'
 
 
 runHeadless = True
