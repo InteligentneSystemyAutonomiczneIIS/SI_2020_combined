@@ -12,7 +12,7 @@ Opis:
 - RemoteControlTeensy - projekt w formacie PlatformIO (VS Code) zawierający kod wykonywany na mikrokontrolerze teensy (sterowanie)
 - RemoteImShow - kod umożliwiający wysyłanie obrazu z platformy na serwer zewnętrzny, w oparciu o websockets (!rozwiązanie pokazowe, nie do użytku produkcyjnego!)
 - CameraTest - proste skrypty prezentujące dostęp do kamery z wykorzystaniem zmodyfikowanej biblioteki imutils oraz jetson.utils
-- hokuyo_lidar - biblioteki do obsługi lidara 2D Hokuyo UTM-30LX z poziomu pythona3
+- hokuyo_lidar - biblioteki do obsługi lidara 2D Hokuyo UTM-30LX z poziomu pythona3 
 
 
 
