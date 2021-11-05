@@ -9,31 +9,31 @@ import argparse
 import pyurg
 import time
 import numpy as np
+import sys
 
 
 def showPlotGUI(plt, data):
     x, y = data
-    plt.plot(x,y)
-    plt.autoscale()
-
-    plt.draw()
+    axis = plt.gca()
     axis.clear()
-    plt.pause(0.1)
-    time.sleep(0.01)
+    plt.plot(x,y)
+    plt.draw()
+    plt.autoscale()
+    plt.pause(0.01)
 
 
 def showPlotTerminal(data):
     x, y = data
     x = np.array(x)
     y = np.array(y)
-    # gp.plot( (x, y), _with = 'lines', terminal = 'dumb 80,40', unset = 'grid')
-    gp.plot( (x, y), _with = 'boxes', terminal = 'dumb 80,40', unset = 'grid')
+    gp.plot( (x, y), _with = 'lines', terminal = 'dumb 80,40', unset = 'grid')
+    # gp.plot( (x, y), _with = 'boxes', terminal = 'dumb 80,40', unset = 'grid')
 
 
 if __name__ == "__main__":
 
     ap = argparse.ArgumentParser()
-    ap.add_argument("-n", "--headless", type=bool, default=True, 
+    ap.add_argument("-n", "--headless", default=False, action='store_true',
                     help="Run the application in terminal mode")
     ap.add_argument("-d", "--device", type=str, default='/dev/ttyACM1',
 	                help="path to connected device (usually /dev/ttyACM1)")
@@ -51,8 +51,8 @@ if __name__ == "__main__":
         import time
 
     urg = pyurg.Urg()
-    urg.reset_urg(device)
     urg.set_urg(device)
+    urg.reset_urg(device)
 
     if not isHeadless:
         plt.ion()
@@ -68,11 +68,12 @@ if __name__ == "__main__":
             
             if isHeadless:
                 showPlotTerminal((x,y))
-
             else:
                 showPlotGUI(plt, (x,y))
+
         except KeyboardInterrupt:
             print("Stopping program")
             urg.reset_urg(device)
             urg.close_port()
+            sys.exit()
             
