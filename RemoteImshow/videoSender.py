@@ -61,7 +61,7 @@ if __name__ == "__main__":
 
     while(True):
         # Capture each frame of webcam video
-        ret,frame = vs.read()
+        frame = vs.read()
         # cv2.imshow("My cam video", frame)
 
         rs.remoteImShow(frame)
