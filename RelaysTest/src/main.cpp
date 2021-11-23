@@ -40,7 +40,7 @@ void setup()
 
 void loop()
 {
-    trigger.shoot();
+    // trigger.shoot();
     // delay(50);
 }
 

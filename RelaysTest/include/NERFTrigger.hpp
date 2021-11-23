@@ -76,8 +76,12 @@ class NERFTrigger
         void setupRelays()
         {
             //set pins to output + open drain (necessary for some boards)
-            pinMode(relayIN1_pin, OUTPUT_OPENDRAIN);
-            pinMode(relayIN2_pin, OUTPUT_OPENDRAIN);
+            // pinMode(relayIN1_pin, OUTPUT_OPENDRAIN);
+            // pinMode(relayIN2_pin, OUTPUT_OPENDRAIN);
+
+            //set pins to output (normal mode, necessary with pull-down resistors - like in IIS Car)
+            pinMode(relayIN1_pin, OUTPUT);
+            pinMode(relayIN2_pin, OUTPUT);
             
             //retract
             digitalWriteFast(relayIN1_pin, defaultNotEnergized); 
