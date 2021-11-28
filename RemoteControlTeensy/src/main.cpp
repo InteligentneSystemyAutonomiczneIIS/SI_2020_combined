@@ -26,6 +26,9 @@ boolean newData = false;
 float leftSide = 0;
 float rightSide = 0;
 
+float yawPos = YawCalibrationCenter;
+float pitchPos = PitchCalibrationCenter;
+
 
 //============
 
@@ -129,6 +132,17 @@ void loop() {
             //   because strtok() used in parseData() replaces the commas with \0
         packet = parseData();
         // showParsedData(packet);
+        
+        if (strcmp(packet.message, "stop") == 0)
+        {
+            Brake();
+            isStopped = true;
+        }
+        if (strcmp(packet.message, "start") == 0)
+        {
+            Brake();
+            isStopped = false;
+        }
 
         if (strcmp(packet.message, "motor") == 0)
         {
@@ -136,19 +150,19 @@ void loop() {
             {
                 leftSide = packet.first;
                 rightSide = packet.second;
+
+                SetPowerLevel(EngineSelector::Left, leftSide, 200);
+                SetPowerLevel(EngineSelector::Right, rightSide, 200);
             }
         }
 
-        if (strcmp(packet.message, "stop") == 0)
+        if (strcmp(packet.message, "servo") == 0)
         {
-            Brake();
-            isStopped = true;
-        }
+            yawPos = packet.first;
+            pitchPos = packet.second;
 
-        if (strcmp(packet.message, "start") == 0)
-        {
-            Brake();
-            isStopped = false;
+            moveServo(ServoSelector::Yaw, yawPos);
+            moveServo(ServoSelector::Pitch, pitchPos);
         }
 
         newData = false;

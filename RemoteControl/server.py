@@ -3,7 +3,8 @@ import serial
 import json
 import time
 
-useSerial = False
+# for debgging purposes - set to False when testing (no commands to Teensy)
+useSerial = True
 
 # serial communication initialization
 if useSerial:
@@ -15,16 +16,21 @@ isStopped = True
 servoPosYaw = 90 # yaw
 servoPosPitch = 90 # pitch
 
+motorDeadzone = 20
+
+def stopMotors():
+	if useSerial:
+		packet = '<motor, {}, {}>'.format(0, 0)
+		packetBytes = bytes(packet, 'utf-8')
+		ser.write(packetBytes)
+
 
 # Called for every client connecting (after handshake)
 def new_client(client, server):
 	print("New client connected and was given id %d" % client['id'])
 	server.send_message_to_all("Hey all, a new client has joined us")
-	packet = '<motor, {}, {}>'.format(0, 0)
-	packetBytes = bytes(packet, 'utf-8')
 	
-	if useSerial:
-		ser.write(packetBytes)
+	stopMotors()
 	global isStopped
 	isStopped = True
 
@@ -63,12 +69,13 @@ def parseControllerCommands(message):
 			direction = -1
 
 
-		motorRight = direction * min(255, gas - steering)
-		if -30 <= motorRight <= 30:
+		motorRight = direction * min(255, (gas-brake) + steering) #gas-brake -> single acceletation axis
+		if -motorDeadzone <= motorRight <= motorDeadzone:
 			motorRight = 0
-		motorLeft = direction * min(255, gas +  steering)
-		if -30 <= motorLeft <= 30:
+		motorLeft = direction * min(255, (gas-brake) - steering) #gas-brake -> single acceletation axis
+		if -motorDeadzone <= motorLeft <= motorDeadzone:
 			motorLeft = 0
+		
 		packet = '<motor, {}, {}>'.format(motorLeft, motorRight)
 		packetBytes = bytes(packet, 'utf-8')
 		print(packet)
@@ -95,7 +102,6 @@ def parseControllerCommands(message):
 		ser.write(packetBytes)
 	
 
-	 
 
 # Called when a client sends a message
 def message_received(client, server, message):
@@ -106,9 +112,10 @@ def message_received(client, server, message):
 
 
 if __name__ == "__main__":
-
 	PORT=8084
-	server = WebsocketServer(host='10.24.224.217', port=PORT)
+
+	stopMotors()
+	server = WebsocketServer(host='10.24.224.216', port=PORT)
 	server.set_fn_new_client(new_client)
 	server.set_fn_client_left(client_left)
 	server.set_fn_message_received(message_received)
