@@ -9,6 +9,7 @@ from Controller import Controller
 preferredFPS = 60
 refreshRate = 1./preferredFPS
 host = "ws://10.24.224.217:8084"
+# host = "ws://127.0.0.1:8084"
 
 def main():
     controller = Controller()

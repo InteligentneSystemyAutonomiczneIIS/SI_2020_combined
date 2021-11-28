@@ -4,7 +4,7 @@ import json
 import time
 
 # for debgging purposes - set to False when testing (no commands to Teensy)
-useSerial = True
+useSerial = False
 
 # serial communication initialization
 if useSerial:
@@ -17,6 +17,7 @@ servoPosYaw = 90 # yaw
 servoPosPitch = 90 # pitch
 
 motorDeadzone = 20
+steeringDeadzone = 45
 
 def stopMotors():
 	if useSerial:
@@ -44,7 +45,26 @@ def client_left(client, server):
 		ser.write(packetBytes)
 	global isStopped
 	isStopped = True
+
+def calculateMotorValues(gas, brake, steering, direction):
+			
+	motorLeft = direction * min(255, max(0,(gas-brake))) #gas-brake -> single acceleration axis
+	motorRight = direction * min(255, max(0,(gas-brake)))  #gas-brake -> single acceleration axis
+
+	if steering < 0:
+		modifier = - min(abs(steering), abs(motorLeft))
+		motorLeft += direction*modifier
+	else:
+		modifier = min(abs(steering), abs(motorLeft))
+		motorRight -= direction*modifier
 	
+	if -motorDeadzone <= motorRight <= motorDeadzone:
+		motorRight = 0
+	if -motorDeadzone <= motorLeft <= motorDeadzone:
+		motorLeft = 0
+
+	return motorLeft, motorRight
+
 
 def parseControllerCommands(message):
 	messageDict = json.loads(message)
@@ -60,6 +80,8 @@ def parseControllerCommands(message):
 
 	if not isStopped:
 		steering = messageDict['steering']
+		if -steeringDeadzone <= steering <= steeringDeadzone:
+			steering = 0
 		gas = messageDict['gas']
 		brake = messageDict['brake']
 		
@@ -68,13 +90,7 @@ def parseControllerCommands(message):
 		elif messageDict['gear_down'] == 1:
 			direction = -1
 
-
-		motorRight = direction * min(255, (gas-brake) + steering) #gas-brake -> single acceletation axis
-		if -motorDeadzone <= motorRight <= motorDeadzone:
-			motorRight = 0
-		motorLeft = direction * min(255, (gas-brake) - steering) #gas-brake -> single acceletation axis
-		if -motorDeadzone <= motorLeft <= motorDeadzone:
-			motorLeft = 0
+		motorLeft, motorRight = calculateMotorValues(gas, brake, steering, direction)
 		
 		packet = '<motor, {}, {}>'.format(motorLeft, motorRight)
 		packetBytes = bytes(packet, 'utf-8')
@@ -115,7 +131,8 @@ if __name__ == "__main__":
 	PORT=8084
 
 	stopMotors()
-	server = WebsocketServer(host='10.24.224.216', port=PORT)
+	server = WebsocketServer(host='10.24.224.217', port=PORT)
+	# server = WebsocketServer(host='0.0.0.0', port=PORT)
 	server.set_fn_new_client(new_client)
 	server.set_fn_client_left(client_left)
 	server.set_fn_message_received(message_received)
