@@ -4,11 +4,11 @@ import json
 import time
 
 # for debgging purposes - set to False when testing (no commands to Teensy)
-useSerial = False
+useSerial = True
 
 # serial communication initialization
 if useSerial:
-	ser = serial.Serial(port='/dev/ttyACM0', baudrate=115200, timeout=0.05)
+	ser = serial.Serial(port='/dev/ttyACM1', baudrate=115200, timeout=0.05)
 	time.sleep(2)
 
 direction = 1
@@ -20,6 +20,7 @@ motorDeadzone = 20
 steeringDeadzone = 45
 
 def stopMotors():
+	print("Stopping motors")
 	if useSerial:
 		packet = '<motor, {}, {}>'.format(0, 0)
 		packetBytes = bytes(packet, 'utf-8')
@@ -92,14 +93,14 @@ def parseControllerCommands(message):
 
 		motorLeft, motorRight = calculateMotorValues(gas, brake, steering, direction)
 		
-		packet = '<motor, {}, {}>'.format(motorLeft, motorRight)
+		packet = '<motor,{},{}>'.format(motorLeft, motorRight)
 		packetBytes = bytes(packet, 'utf-8')
 		print(packet)
 		
 		if useSerial:	
 			ser.write(packetBytes)
 	else:
-		packet = '<motor, {}, {}>'.format(0, 0)
+		packet = '<motor,{},{}>'.format(0, 0)
 		packetBytes = bytes(packet, 'utf-8')
 		if useSerial:	
 			ser.write(packetBytes)
@@ -112,7 +113,8 @@ def parseControllerCommands(message):
 	if messageDict["hat_y"] != 0:
 		servoPosPitch = (servoPosPitch + 5*hat_y) if 0 <= (servoPosPitch + hat_y) <= 180 else servoPosPitch 
 
-	packet = '<servo, {}, {}>'.format(servoPosYaw, servoPosPitch)
+	packet = '<servo,{},{}>'.format(servoPosYaw, servoPosPitch)
+	packetBytes = bytes(packet, 'utf-8')
 	print(packet)
 	if useSerial:	
 		ser.write(packetBytes)
@@ -131,7 +133,7 @@ if __name__ == "__main__":
 	PORT=8084
 
 	stopMotors()
-	server = WebsocketServer(host='10.24.224.217', port=PORT)
+	server = WebsocketServer(host='10.24.224.216', port=PORT)
 	# server = WebsocketServer(host='0.0.0.0', port=PORT)
 	server.set_fn_new_client(new_client)
 	server.set_fn_client_left(client_left)

@@ -78,10 +78,10 @@ dataPacket parseData() {      // split the data into its parts
     strcpy(tmpPacket.message, strtokIndx); // copy it to messageFromPC
 
     strtokIndx = strtok(NULL, ","); // this continues where the previous call left off
-    tmpPacket.first = atof(strtokIndx);
+    tmpPacket.first = atoi(strtokIndx);
 
     strtokIndx = strtok(NULL, ",");
-    tmpPacket.second = atof(strtokIndx);
+    tmpPacket.second = atoi(strtokIndx);
 
     return tmpPacket;
 }
@@ -151,8 +151,8 @@ void loop() {
                 leftSide = packet.first;
                 rightSide = packet.second;
 
-                SetPowerLevel(EngineSelector::Left, leftSide, 200);
-                SetPowerLevel(EngineSelector::Right, rightSide, 200);
+                SetPowerLevel(EngineSelector::Left, leftSide);
+                SetPowerLevel(EngineSelector::Right, rightSide);
             }
         }
 
