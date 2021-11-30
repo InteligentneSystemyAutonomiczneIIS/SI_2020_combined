@@ -56,17 +56,16 @@
 
 //    }
 //    // Do other stuff here, really. Think of it as multi-tasking.
-
-
 // }
 
+// #include <Ping.h>
+// #include "NewPing.h"
 #include <Arduino.h>
-#include <Ping.h>
-#include <Encoder.h>
-#include "NewPing.h"
-#include "ISAMobile.h"
-
 #include <NewPing.h>
+#include <Encoder.h>
+#include "ISAMobile.h"
+#include <Axle.hpp>
+
 
 #define SONAR_NUM      3 // Number of sensors.
 #define MAX_DISTANCE 200 // Maximum distance (in cm) to ping.
@@ -91,10 +90,11 @@ NewPing sonar[SONAR_NUM] = {   // Sensor object array.
                      MAX_DISTANCE)
 };
 
+Axle rearAxle;
 
 // // ##########
-Encoder rightSide(ENCODER_REAR_RIGHT_1, ENCODER_REAR_RIGHT_2);
-Encoder leftSide(ENCODER_REAR_LEFT_1, ENCODER_REAR_LEFT_2);
+// Encoder rightSide(ENCODER_REAR_RIGHT_1, ENCODER_REAR_RIGHT_2);
+// Encoder leftSide(ENCODER_REAR_LEFT_1, ENCODER_REAR_LEFT_2);
 long positionLeft  = 0;
 long positionRight = 0;
 
@@ -124,6 +124,9 @@ void echoCheck() {
 
 void setup() {
   Serial.begin(115200);
+  rearAxle.setupEncoders(ENCODER_REAR_LEFT_1, ENCODER_REAR_LEFT_2, ENCODER_REAR_RIGHT_1, ENCODER_REAR_RIGHT_2);
+  rearAxle.initialize();
+  
   pingTimer[0] = millis() + 75;
  
   for (uint8_t i = 1; i < SONAR_NUM; i++)
@@ -140,9 +143,15 @@ void loop() {
     }
   }
   // Other code that *DOESN'T* analyze ping results can go here.
-
-   positionLeft = leftSide.read();
-   positionRight = rightSide.read();
-  //  Serial.println("Left = " + String(positionLeft) + "; Right = " + String(positionRight));
+  
+  auto encoderPositions = rearAxle.GetEncoderTicks();
+  int newLeft = std::get<0>(encoderPositions);
+  int newRight = std::get<1>(encoderPositions);
+  if (newLeft != positionLeft || newRight != positionRight)
+  {
+    positionLeft = newLeft;
+    positionRight = newRight;
+    Serial.println("Left = " + String(positionLeft) + "; Right = " + String(positionRight));
+  }
 }
 
