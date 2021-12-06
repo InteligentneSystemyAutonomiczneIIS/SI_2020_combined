@@ -103,6 +103,7 @@ private:
     // Linear speed (m/s)
     float calculateAverageLinearSpeed(int leftEncoderTicks, int rightEncoderTicks, std::chrono::milliseconds timeBetweenMeasurements)
     {
+
         float leftWheelSpeed = calculateLinearSpeedForWheel(leftEncoderTicks, this->previousLeftEncoderTicks, timeBetweenMeasurements, this->encoderTicksPerRevolution, this->wheelDiameterInMM);
         float rightWheelSpeed = calculateLinearSpeedForWheel(rightEncoderTicks, this->previousRightEncoderTicks, timeBetweenMeasurements, this->encoderTicksPerRevolution, this->wheelDiameterInMM);
 
@@ -110,11 +111,12 @@ private:
 
     }
 
-    float calculateLinearSpeedForWheel(int currentEncoderTicks, int previousEncoderTicks, std::chrono::milliseconds timeBetweenMeasurements, int ticksPerFullRotation, float wheelDiameter)
+    float calculateLinearSpeedForWheel(int currentEncoderTicks, int previousEncoderTicks, std::chrono::milliseconds timeBetweenMeasurements, int ticksPerFullRotation, float wheelDiameterInMM)
     {
+
         float RPM = calculateRotationalSpeedForWheel(currentEncoderTicks, previousEncoderTicks, timeBetweenMeasurements, ticksPerFullRotation);
         float angularVelocity = (RPM/60) * 2*PI;
-        float linearValocity = angularVelocity * (wheelDiameter/2);
+        float linearValocity = angularVelocity * (wheelDiameterInMM/1000/2);
         return linearValocity;
 
     }
@@ -131,8 +133,9 @@ private:
 
     float calculateRotationalSpeedForWheel(int currentEncoderTicks, int previousEncoderTicks, std::chrono::milliseconds timeBetweenMeasurements, int ticksPerFullRotation)
     {
-        unsigned long timeBetween = timeBetweenMeasurements.count();
-        float RPM = ((currentEncoderTicks - previousEncoderTicks) / ticksPerFullRotation) / (timeBetween/1000) * 60;
+
+        float timeBetweenInSeconds = float(timeBetweenMeasurements.count()) / 1000.0;
+        float RPM = ((float(currentEncoderTicks) - float(previousEncoderTicks) ) / float(ticksPerFullRotation)) / timeBetweenInSeconds * 60;
         return RPM;
 
     }
