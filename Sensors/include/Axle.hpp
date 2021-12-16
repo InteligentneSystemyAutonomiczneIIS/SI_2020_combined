@@ -4,6 +4,7 @@
 #include <Encoder.h>
 #include <memory>
 #include <chrono>
+#include <ISAMobile.h>
 
 class Axle
 {
@@ -11,13 +12,21 @@ private:
     // configurable params (defaults)
     int encoderTicksPerRevolution = 354; // 352 - 356; average, can be slightly different for left and right wheels
     float wheelDiameterInMM = 120.0; // 118.1 - 122.2 milimeters
+    float wheelDiameterInMeters =  wheelDiameterInMM / 1000.0;
+    float axleLengthInMeters = 0.277; //meters
 
-    float currentRotationalSpeed = 0;
-    float currentLinearSpeed = 0;
+    float currentRotationalSpeed = 0.0f;
+    float currentLinearSpeed = 0.0f;
+
+    float leftWheelDistance = 0.0f;
+    float rightWheelDistance = 0.0f;
+
+
     std::unique_ptr<Encoder> leftWheelEncoder;
     std::unique_ptr<Encoder> rightWheelEncoder;
     int previousLeftEncoderTicks = 0;
     int previousRightEncoderTicks = 0;
+
 
     
     TeensyTimerTool::PeriodicTimer encoderCheckTimer;
@@ -35,27 +44,30 @@ public:
 
     Axle(float wheelDiameterInMilimeters, float encoderTicksPerRevolution)
     {
-        setWheelsDiameter(wheelDiameterInMilimeters);
-        setEncoderTicksPerWheelRevolution(encoderTicksPerRevolution);
+        SetWheelsDiameter(wheelDiameterInMilimeters);
+        SetEncoderTicksPerWheelRevolution(encoderTicksPerRevolution);
     }
 
-    void setWheelsDiameter(float wheelDiameterInMilimeters )
+    void SetWheelsDiameter(float wheelDiameterInMilimeters )
     {
         this->wheelDiameterInMM = wheelDiameterInMilimeters;
+        this->wheelDiameterInMeters = wheelDiameterInMilimeters / 1000.0;
     }
 
-    void setEncoderTicksPerWheelRevolution(float encoderTicksPerRevolution)
+    void SetEncoderTicksPerWheelRevolution(float encoderTicksPerRevolution)
     {
         this->encoderTicksPerRevolution = encoderTicksPerRevolution;
     }
 
-    void setupEncoders(int pinLeft1, int pinLeft2,  int pinRight1, int pinRight2)
+    // default values are for rear axle
+    void SetupEncoders(int pinLeft1 = ENCODER_REAR_LEFT_1, int pinLeft2 = ENCODER_REAR_LEFT_2, 
+                       int pinRight1 = ENCODER_REAR_RIGHT_1, int pinRight2 = ENCODER_REAR_RIGHT_2)
     {
         leftWheelEncoder = std::make_unique<Encoder>(pinLeft1, pinLeft2);
         rightWheelEncoder = std::make_unique<Encoder>(pinRight1, pinRight2);
     }
 
-    void initialize()
+    void Initialize()
     {
         this->currentRotationalSpeed = 0;
         this->currentLinearSpeed = 0;
@@ -66,19 +78,29 @@ public:
         this->prevTime = millis();
     }
 
-    float getCurrentLinearSpeed()
+    float GetCurrentLinearSpeed()
     {
         return currentLinearSpeed;
     }
 
-    float getCurrentRotationalSpeed()
+    float GetCurrentRotationalSpeed()
     {
         return currentRotationalSpeed;
+    }
+
+    std::tuple<float, float> GetCurrentWheelDistance()
+    {
+        return std::tuple<float, float> (this->leftWheelDistance, this->rightWheelDistance);
     }
 
     std::tuple<int32_t, int32_t> GetEncoderTicks()
     {
         return std::tuple<int32_t, int32_t>(previousLeftEncoderTicks, previousRightEncoderTicks);
+    }
+
+    float GetAxleLength()
+    {
+        return this->axleLengthInMeters;
     }
 
 private:
@@ -90,8 +112,16 @@ private:
         int leftEncoderTicks = leftWheelEncoder->read();
         int rightEncoderTicks = rightWheelEncoder->read();
 
-        this->currentLinearSpeed = calculateAverageLinearSpeed(leftEncoderTicks, rightEncoderTicks, std::chrono::milliseconds(currentTime - prevTime));
-        this->currentRotationalSpeed = calculateAverageRotationalSpeed(leftEncoderTicks, rightEncoderTicks, std::chrono::milliseconds(currentTime - prevTime));
+        auto timeDelta = std::chrono::milliseconds(currentTime - prevTime);
+
+        this->currentLinearSpeed = CalculateAverageLinearSpeed(leftEncoderTicks, rightEncoderTicks, timeDelta);
+        
+        this->currentRotationalSpeed = CalculateAverageRotationalSpeed(leftEncoderTicks, rightEncoderTicks, timeDelta);
+        
+
+        this->leftWheelDistance += CalculateWheelDistance(leftEncoderTicks, previousLeftEncoderTicks, this->encoderTicksPerRevolution);
+
+        this->rightWheelDistance += CalculateWheelDistance(rightEncoderTicks, previousRightEncoderTicks, this->encoderTicksPerRevolution);
 
 
         previousLeftEncoderTicks = leftEncoderTicks;
@@ -101,42 +131,42 @@ private:
     }
 
     // Linear speed (m/s)
-    float calculateAverageLinearSpeed(int leftEncoderTicks, int rightEncoderTicks, std::chrono::milliseconds timeBetweenMeasurements)
+    float CalculateAverageLinearSpeed(int leftEncoderTicks, int rightEncoderTicks, std::chrono::milliseconds timeBetweenMeasurements)
     {
 
-        float leftWheelSpeed = calculateLinearSpeedForWheel(leftEncoderTicks, this->previousLeftEncoderTicks, timeBetweenMeasurements, this->encoderTicksPerRevolution, this->wheelDiameterInMM);
-        float rightWheelSpeed = calculateLinearSpeedForWheel(rightEncoderTicks, this->previousRightEncoderTicks, timeBetweenMeasurements, this->encoderTicksPerRevolution, this->wheelDiameterInMM);
+        float leftWheelSpeed = CalculateLinearSpeedForWheel(leftEncoderTicks, this->previousLeftEncoderTicks, timeBetweenMeasurements, this->encoderTicksPerRevolution, this->wheelDiameterInMM);
+        float rightWheelSpeed = CalculateLinearSpeedForWheel(rightEncoderTicks, this->previousRightEncoderTicks, timeBetweenMeasurements, this->encoderTicksPerRevolution, this->wheelDiameterInMM);
 
         return (leftWheelSpeed + rightWheelSpeed) / 2;
-
     }
 
-    float calculateLinearSpeedForWheel(int currentEncoderTicks, int previousEncoderTicks, std::chrono::milliseconds timeBetweenMeasurements, int ticksPerFullRotation, float wheelDiameterInMM)
+    float CalculateLinearSpeedForWheel(int currentEncoderTicks, int previousEncoderTicks, std::chrono::milliseconds timeBetweenMeasurements, int ticksPerFullRotation, float wheelDiameterInMM)
     {
 
-        float RPM = calculateRotationalSpeedForWheel(currentEncoderTicks, previousEncoderTicks, timeBetweenMeasurements, ticksPerFullRotation);
+        float RPM = CalculateRotationalSpeedForWheel(currentEncoderTicks, previousEncoderTicks, timeBetweenMeasurements, ticksPerFullRotation);
         float angularVelocity = (RPM/60) * 2*PI;
-        float linearValocity = angularVelocity * (wheelDiameterInMM/1000/2);
+        float linearValocity = angularVelocity * (wheelDiameterInMeters/2);
         return linearValocity;
-
     }
 
     // Rotational Speed (RPM)
-    float calculateAverageRotationalSpeed(int leftEncoderTicks, int rightEncoderTicks, std::chrono::milliseconds timeBetweenMeasurements)
+    float CalculateAverageRotationalSpeed(int leftEncoderTicks, int rightEncoderTicks, std::chrono::milliseconds timeBetweenMeasurements)
     {
-        float leftWheelSpeed = calculateRotationalSpeedForWheel(leftEncoderTicks, this->previousLeftEncoderTicks, encoderCheckInterval, this->encoderTicksPerRevolution);
-        float rightWheelSpeed = calculateRotationalSpeedForWheel(rightEncoderTicks, this->previousRightEncoderTicks, encoderCheckInterval, this->encoderTicksPerRevolution);
+        float leftWheelSpeed = CalculateRotationalSpeedForWheel(leftEncoderTicks, this->previousLeftEncoderTicks, encoderCheckInterval, this->encoderTicksPerRevolution);
+        float rightWheelSpeed = CalculateRotationalSpeedForWheel(rightEncoderTicks, this->previousRightEncoderTicks, encoderCheckInterval, this->encoderTicksPerRevolution);
 
         return (leftWheelSpeed + rightWheelSpeed) / 2;
-
     }
 
-    float calculateRotationalSpeedForWheel(int currentEncoderTicks, int previousEncoderTicks, std::chrono::milliseconds timeBetweenMeasurements, int ticksPerFullRotation)
+    float CalculateRotationalSpeedForWheel(int currentEncoderTicks, int previousEncoderTicks, std::chrono::milliseconds timeBetweenMeasurements, int ticksPerFullRotation)
     {
-
         float timeBetweenInSeconds = float(timeBetweenMeasurements.count()) / 1000.0;
-        float RPM = ((float(currentEncoderTicks) - float(previousEncoderTicks) ) / float(ticksPerFullRotation)) / timeBetweenInSeconds * 60;
+        float RPM = ((float(currentEncoderTicks - previousEncoderTicks) ) / float(ticksPerFullRotation)) / timeBetweenInSeconds * 60;
         return RPM;
+    }
 
+    float CalculateWheelDistance(int currentEncoderTicks, int previousEncoderTicks, int ticksPerFullRotation )
+    {
+        return PI*(this->wheelDiameterInMeters) * float(currentEncoderTicks - previousEncoderTicks) / float(ticksPerFullRotation);
     }
 };

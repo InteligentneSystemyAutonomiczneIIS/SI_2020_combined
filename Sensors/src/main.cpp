@@ -11,6 +11,7 @@
 #include <Encoder.h>
 #include "ISAMobile.h"
 #include <Axle.hpp>
+#include <Odometry.hpp>
 
 
 #define SONAR_NUM      3 // Number of sensors.
@@ -36,7 +37,8 @@ NewPing sonar[SONAR_NUM] = {   // Sensor object array.
                      MAX_DISTANCE)
 };
 
-Axle rearAxle;
+// Axle rearAxle;
+Odometry odometry;
 long positionLeft  = 0;
 long positionRight = 0;
 
@@ -66,8 +68,9 @@ void echoCheck() {
 
 void setup() {
   Serial.begin(115200);
-  rearAxle.setupEncoders(ENCODER_REAR_LEFT_1, ENCODER_REAR_LEFT_2, ENCODER_REAR_RIGHT_1, ENCODER_REAR_RIGHT_2);
-  rearAxle.initialize();
+  odometry.Initialize();
+  // rearAxle.SetupEncoders(ENCODER_REAR_LEFT_1, ENCODER_REAR_LEFT_2, ENCODER_REAR_RIGHT_1, ENCODER_REAR_RIGHT_2);
+  // rearAxle.Initialize();
   
   pingTimer[0] = millis() + 75;
  
@@ -86,15 +89,21 @@ void loop() {
   }
   // Other code that *DOESN'T* analyze ping results can go here.
   
-  auto encoderPositions = rearAxle.GetEncoderTicks();
-  int newLeft = std::get<0>(encoderPositions);
-  int newRight = std::get<1>(encoderPositions);
-  if (newLeft != positionLeft || newRight != positionRight)
-  {
-    positionLeft = newLeft;
-    positionRight = newRight;
-    // Serial.println("Left = " + String(positionLeft) + "; Right = " + String(positionRight));
-    Serial.println("RPM = " + String(rearAxle.getCurrentRotationalSpeed() ) + "; Velocity [m/s] = " + String(rearAxle.getCurrentLinearSpeed()));
-  }
+  // auto encoderPositions = rearAxle.GetEncoderTicks();
+  // int newLeft = std::get<0>(encoderPositions);
+  // int newRight = std::get<1>(encoderPositions);
+
+  float x, y, theta;
+  std::tie(x, y, theta) = odometry.GetPosition();
+  Serial.println("X: " + String(x) + " ;Y: "+ String(y) + " ; theta: " + String(theta));
+
+
+  // if (newLeft != positionLeft || newRight != positionRight)
+  // {
+  //   positionLeft = newLeft;
+  //   positionRight = newRight;
+  //   // Serial.println("Left = " + String(positionLeft) + "; Right = " + String(positionRight));
+  //   Serial.println("RPM = " + String(rearAxle.GetCurrentRotationalSpeed() ) + "; Velocity [m/s] = " + String(rearAxle.GetCurrentLinearSpeed()));
+  // }
 }
 
