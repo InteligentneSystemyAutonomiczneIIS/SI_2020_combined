@@ -1,3 +1,6 @@
+// // Encoder: https://www.pjrc.com/teensy/td_libs_Encoder.html
+// // TeensyTimerTools: https://github.com/luni64/TeensyTimerTool.git
+
 #pragma once
 
 #include "TeensyTimerTool.h"
@@ -15,7 +18,14 @@ private:
     float wheelDiameterInMeters =  wheelDiameterInMM / 1000.0;
     float axleLengthInMeters = 0.277; //meters
 
+
+    float currentRotationalSpeedLeftWheel = 0.0f;
+    float currentRotationalSpeedRightWheel = 0.0f;
     float currentRotationalSpeed = 0.0f;
+
+
+    float currentLinearSpeedLeftWheel = 0.0f;
+    float currentLinearSpeedRightWheel = 0.0f;
     float currentLinearSpeed = 0.0f;
 
     float leftWheelDistance = 0.0f;
@@ -72,8 +82,9 @@ public:
         this->currentRotationalSpeed = 0;
         this->currentLinearSpeed = 0;
 
+        // initialize timers and set up callback functions
         encoderCheckTimer = TeensyTimerTool::PeriodicTimer(TeensyTimerTool::TCK32);
-        encoderCheckTimer.begin([this] {this->encoderCheck();}, encoderCheckInterval);
+        encoderCheckTimer.begin([this] {this->Update();}, encoderCheckInterval);
 
         this->prevTime = millis();
     }
@@ -106,62 +117,49 @@ public:
 private:
 
     //make sure executon will not take longer than encoderCheckInterval, that might cause problems
-    void encoderCheck()
+    void Update()
     {
         unsigned long currentTime = millis();
         int leftEncoderTicks = leftWheelEncoder->read();
         int rightEncoderTicks = rightWheelEncoder->read();
 
+        //actual time between executions - timers can be imprecise (though it is not really necessary here)
         auto timeDelta = std::chrono::milliseconds(currentTime - prevTime);
 
-        this->currentLinearSpeed = CalculateAverageLinearSpeed(leftEncoderTicks, rightEncoderTicks, timeDelta);
-        
-        this->currentRotationalSpeed = CalculateAverageRotationalSpeed(leftEncoderTicks, rightEncoderTicks, timeDelta);
-        
+        // linear speed [m/s]
+        this->currentLinearSpeedLeftWheel = CalculateLinearSpeedForWheel(leftEncoderTicks, this->previousLeftEncoderTicks, timeDelta);
+        this->currentLinearSpeedRightWheel = CalculateLinearSpeedForWheel(rightEncoderTicks, this->previousRightEncoderTicks, timeDelta);
+        this->currentLinearSpeed = (this->currentLinearSpeedLeftWheel + this->currentLinearSpeedRightWheel ) / 2.0f;
 
+        // Rotational Speed [RPM]
+        this->currentRotationalSpeedLeftWheel = CalculateRotationalSpeedForWheel(leftEncoderTicks, this->previousLeftEncoderTicks, timeDelta);
+        this->currentRotationalSpeedLeftWheel = CalculateRotationalSpeedForWheel(rightEncoderTicks, this->previousRightEncoderTicks, timeDelta);
+        this->currentRotationalSpeed = (this->currentRotationalSpeedLeftWheel + this->currentRotationalSpeedLeftWheel) / 2.0f;
+        
+        // wheel distance [m] (disregarding any form of slip, calculated based on rotations only) 
         this->leftWheelDistance += CalculateWheelDistance(leftEncoderTicks, previousLeftEncoderTicks, this->encoderTicksPerRevolution);
-
         this->rightWheelDistance += CalculateWheelDistance(rightEncoderTicks, previousRightEncoderTicks, this->encoderTicksPerRevolution);
 
-
+        // rember values
         previousLeftEncoderTicks = leftEncoderTicks;
         previousRightEncoderTicks = rightEncoderTicks;
         this->prevTime = currentTime;
 
     }
 
-    // Linear speed (m/s)
-    float CalculateAverageLinearSpeed(int leftEncoderTicks, int rightEncoderTicks, std::chrono::milliseconds timeBetweenMeasurements)
+    float CalculateLinearSpeedForWheel(int currentEncoderTicks, int previousEncoderTicks, std::chrono::milliseconds timeBetweenMeasurements)
     {
 
-        float leftWheelSpeed = CalculateLinearSpeedForWheel(leftEncoderTicks, this->previousLeftEncoderTicks, timeBetweenMeasurements, this->encoderTicksPerRevolution, this->wheelDiameterInMM);
-        float rightWheelSpeed = CalculateLinearSpeedForWheel(rightEncoderTicks, this->previousRightEncoderTicks, timeBetweenMeasurements, this->encoderTicksPerRevolution, this->wheelDiameterInMM);
-
-        return (leftWheelSpeed + rightWheelSpeed) / 2;
-    }
-
-    float CalculateLinearSpeedForWheel(int currentEncoderTicks, int previousEncoderTicks, std::chrono::milliseconds timeBetweenMeasurements, int ticksPerFullRotation, float wheelDiameterInMM)
-    {
-
-        float RPM = CalculateRotationalSpeedForWheel(currentEncoderTicks, previousEncoderTicks, timeBetweenMeasurements, ticksPerFullRotation);
+        float RPM = CalculateRotationalSpeedForWheel(currentEncoderTicks, previousEncoderTicks, timeBetweenMeasurements);
         float angularVelocity = (RPM/60) * 2*PI;
         float linearValocity = angularVelocity * (wheelDiameterInMeters/2);
         return linearValocity;
     }
 
-    // Rotational Speed (RPM)
-    float CalculateAverageRotationalSpeed(int leftEncoderTicks, int rightEncoderTicks, std::chrono::milliseconds timeBetweenMeasurements)
-    {
-        float leftWheelSpeed = CalculateRotationalSpeedForWheel(leftEncoderTicks, this->previousLeftEncoderTicks, encoderCheckInterval, this->encoderTicksPerRevolution);
-        float rightWheelSpeed = CalculateRotationalSpeedForWheel(rightEncoderTicks, this->previousRightEncoderTicks, encoderCheckInterval, this->encoderTicksPerRevolution);
-
-        return (leftWheelSpeed + rightWheelSpeed) / 2;
-    }
-
-    float CalculateRotationalSpeedForWheel(int currentEncoderTicks, int previousEncoderTicks, std::chrono::milliseconds timeBetweenMeasurements, int ticksPerFullRotation)
+    float CalculateRotationalSpeedForWheel(int currentEncoderTicks, int previousEncoderTicks, std::chrono::milliseconds timeBetweenMeasurements)
     {
         float timeBetweenInSeconds = float(timeBetweenMeasurements.count()) / 1000.0;
-        float RPM = ((float(currentEncoderTicks - previousEncoderTicks) ) / float(ticksPerFullRotation)) / timeBetweenInSeconds * 60;
+        float RPM = ((float(currentEncoderTicks - previousEncoderTicks) ) / float(this->encoderTicksPerRevolution)) / timeBetweenInSeconds * 60;
         return RPM;
     }
 

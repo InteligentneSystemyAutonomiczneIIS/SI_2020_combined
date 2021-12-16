@@ -1,17 +1,16 @@
 // // NewPing: https://bitbucket.org/teckel12/arduino-new-ping/wiki/Home
 // // https://bitbucket.org/teckel12/arduino-new-ping/wiki/Help%20with%2015%20Sensors%20Example%20Sketch
-// // Encoder: https://www.pjrc.com/teensy/td_libs_Encoder.html
-// // TeensyTimerTools: https://github.com/luni64/TeensyTimerTool.git
 
 
-// #include <Ping.h>
-// #include "NewPing.h"
+
 #include <Arduino.h>
 #include <NewPing.h>
 #include <Encoder.h>
 #include "ISAMobile.h"
 #include <Axle.hpp>
 #include <Odometry.hpp>
+#include <elapsedMillis.h>
+
 
 
 #define SONAR_NUM      3 // Number of sensors.
@@ -23,6 +22,8 @@ unsigned int distances[SONAR_NUM];         // Where the ping distances are store
 uint8_t currentSensor = 0;          // Keeps track of which sensor is active.
 bool isObstacle[SONAR_NUM] = {false};
 
+elapsedMillis elapsedTime;
+unsigned int printingInterval = 200; //ms
 
 
 NewPing sonar[SONAR_NUM] = {   // Sensor object array.
@@ -37,8 +38,8 @@ NewPing sonar[SONAR_NUM] = {   // Sensor object array.
                      MAX_DISTANCE)
 };
 
-// Axle rearAxle;
-Odometry odometry;
+
+Odometry odometry; // odometry using encoders on rear axle
 long positionLeft  = 0;
 long positionRight = 0;
 
@@ -69,8 +70,6 @@ void echoCheck() {
 void setup() {
   Serial.begin(115200);
   odometry.Initialize();
-  // rearAxle.SetupEncoders(ENCODER_REAR_LEFT_1, ENCODER_REAR_LEFT_2, ENCODER_REAR_RIGHT_1, ENCODER_REAR_RIGHT_2);
-  // rearAxle.Initialize();
   
   pingTimer[0] = millis() + 75;
  
@@ -88,22 +87,24 @@ void loop() {
     }
   }
   // Other code that *DOESN'T* analyze ping results can go here.
-  
-  // auto encoderPositions = rearAxle.GetEncoderTicks();
-  // int newLeft = std::get<0>(encoderPositions);
-  // int newRight = std::get<1>(encoderPositions);
+
 
   float x, y, theta;
   std::tie(x, y, theta) = odometry.GetPosition();
-  Serial.println("X: " + String(x) + " ;Y: "+ String(y) + " ; theta: " + String(theta));
 
+  float speed = odometry.GetLinearSpeedSimplified();
+  float rpm = odometry.GetRPMSimplified();
 
-  // if (newLeft != positionLeft || newRight != positionRight)
-  // {
-  //   positionLeft = newLeft;
-  //   positionRight = newRight;
-  //   // Serial.println("Left = " + String(positionLeft) + "; Right = " + String(positionRight));
-  //   Serial.println("RPM = " + String(rearAxle.GetCurrentRotationalSpeed() ) + "; Velocity [m/s] = " + String(rearAxle.GetCurrentLinearSpeed()));
-  // }
+  int32_t leftWheelEncoderTicks, rightWheelEncoderTicks;
+  std::tie(leftWheelEncoderTicks, rightWheelEncoderTicks) = odometry.GetRawEncoderTicks();
+
+  if (elapsedTime > printingInterval)
+  {
+    Serial.println("X: " + String(x) + " ;Y: "+ String(y) + " ;theta: " + String(theta));
+    Serial.println("RPM: " + String(rpm) + " ;Linear speed: " + String(speed));
+    Serial.println("Raw encoder ticks L: " + String(leftWheelEncoderTicks) + "; Raw encoder ticks R: " + String(rightWheelEncoderTicks));
+    elapsedTime = 0;
+  }
+
 }
 

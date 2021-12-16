@@ -1,4 +1,4 @@
-#pragma once
+// // TeensyTimerTools: https://github.com/luni64/TeensyTimerTool.git
 
 #pragma once
 
@@ -19,7 +19,7 @@ private:
     float rightWheelPreviousDistance = 0.0f;
 
 
-    TeensyTimerTool::PeriodicTimer positionCalculationTimer; // can be programmed without timers
+    TeensyTimerTool::PeriodicTimer positionCalculationTimer; //can be programmed without timers
     std::chrono::milliseconds positionCheckInterval = 100ms;
 public:
     Odometry()
@@ -27,11 +27,6 @@ public:
 
 
     }
-
-    // void SetWheelDiameter(float wheelDiameter)
-    // {
-    //     rearAxle.SetWheelsDiameter(wheelDiameter);
-    // }
 
     void Initialize()
     {
@@ -55,6 +50,22 @@ public:
     {
         return std::make_tuple(this->x, this->y, this->theta);
     }
+
+    float GetLinearSpeedSimplified()
+    {
+        return rearAxle.GetCurrentLinearSpeed();
+    }
+
+    float GetRPMSimplified()
+    {
+        return rearAxle.GetCurrentRotationalSpeed();
+    }
+
+    std::tuple<int32_t, int32_t> GetRawEncoderTicks()
+    {
+        return rearAxle.GetEncoderTicks();
+    }
+
     
 private:
 
