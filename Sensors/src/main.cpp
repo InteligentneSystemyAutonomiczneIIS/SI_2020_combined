@@ -100,9 +100,10 @@ void loop() {
 
   if (elapsedTime > printingInterval)
   {
-    Serial.println("X: " + String(x) + " ;Y: "+ String(y) + " ;theta: " + String(theta));
-    Serial.println("RPM: " + String(rpm) + " ;Linear speed: " + String(speed));
+    Serial.println("X: " + String(x) + " ; Y: "+ String(y) + " ; theta: " + String(theta));
+    Serial.println("RPM: " + String(rpm) + " ; Linear speed: " + String(speed));
     Serial.println("Raw encoder ticks L: " + String(leftWheelEncoderTicks) + "; Raw encoder ticks R: " + String(rightWheelEncoderTicks));
+    Serial.println("****************************************");
     elapsedTime = 0;
   }
 
