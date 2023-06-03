@@ -27,12 +27,13 @@ rescaledWidth = 848
 rescaledHeight = 480
 
 
+
 singleThreaded = False
 showImage = True
 
 ######## Initialization
 if singleThreaded:
-    vs = JetsonVideoStreamST(captureResolution=(inputWidth,inputHeight), outputResolution=(rescaledWidth, rescaledHeight), frameRate=inputFrameRate)
+    vs = JetsonVideoStreamST(ocaptureResolution=(inputWidth,inputHeight), outputResolution=(rescaledWidth, rescaledHeight), frameRate=inputFrameRate)
 else:
     vs = JetsonVideoStream(captureResolution=(inputWidth,inputHeight), outputResolution=(rescaledWidth, rescaledHeight), frameRate=inputFrameRate)
 
@@ -49,13 +50,6 @@ for i in range(0, 500):
         
     frame = vs.read()
 
-    #convert to CUDA image (GPU memory)
-    bgr_img  = jetson.utils.cudaFromNumpy(frame, isBGR=True) 
-    # convert from BGR -> RGB
-    rgb_img = jetson.utils.cudaAllocMapped(width=bgr_img .width, height=bgr_img .height, format='rgb8')
-
-    jetson.utils.cudaConvertColor(bgr_img , rgb_img)
-
     if showImage:
         cv2.imshow("stream", frame)
 
@@ -63,7 +57,6 @@ for i in range(0, 500):
     key = cv2.waitKey(1) & 0xFF
     if key == ord('q'):
         break
-
 
     loopEnd = time.time()
     frameTime = (loopEnd - loopStart)*1000
@@ -79,5 +72,4 @@ cv2.destroyAllWindows()
 
 # to cleanly stop frame grabbing
 vs.stop()
-
 time.sleep(1.0) #not strictly necessary, just in case, to give GStreamer some time to clean

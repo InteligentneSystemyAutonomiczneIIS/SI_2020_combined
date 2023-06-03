@@ -1,6 +1,8 @@
 # import the necessary packages
+from queue import Queue
 from threading import Thread
 import cv2
+import atexit
 
 
 # Raspberry Pi Camera V2:
@@ -8,7 +10,7 @@ import cv2
 # GStreamer supported full resolution: (3264, 2464), 21 FPS, FOV: 62 deg H, 48.8 deg V
 # Preferred resolution: (3264,1848), 28FPS, FOV: 62 deg H, 37 deg V
 class JetsonVideoStream:
-	def __init__(self, captureResolution=(3264,1848), outputResolution=(848, 480), frameRate=28, flipMethod=0, 
+	def __init__(self, sensorID=0, captureResolution=(3264,1848), outputResolution=(848, 480), frameRate=28, flipMethod=0, 
 						exposureTimeInMiliseconds=None, gain=None, digitalGain=None, whiteBalanceMode=1,
 						name="JetsonVideoStream"):
 		# set up the gstreamer string used to set up the camera on the jetson board
@@ -38,7 +40,7 @@ class JetsonVideoStream:
 
 		whiteBalanceModeString = 'wbmode=%d ' % whiteBalanceMode if whiteBalanceMode is not 1 else ''  # 0 - auto (?)
         
-		cameraString =	('nvarguscamerasrc %s%s%s! '
+		cameraString =	('nvarguscamerasrc sensor-id=%d %s%s%s ! '
                			'video/x-raw(memory:NVMM), '
                			'width=(int)%d, height=(int)%d, '
                			'format=(string)NV12, framerate=(fraction)%d/1 ! '
@@ -48,21 +50,15 @@ class JetsonVideoStream:
                			'videoconvert ! video/x-raw, format=(string)BGR! appsink ' # OR format=(string)I420 
 						'wait-on-eos=false drop=true max-buffers=1' 
 						# 'wait-on-eos=false drop=true max-buffers=1 -e -vvv'
-						 % (whiteBalanceModeString, gainString, exposureTimeString,
+						 % (sensorID, whiteBalanceModeString, gainString, exposureTimeString,
 						 captureWidth, captureHeight, frameRate, flipMethod, width, height) )
 		
 		print ('OpenCV Gstreamer pipeline input string: \n', cameraString)
+		print ('Using newest test version of the JetsonVideoStream')
 
-		# Original string from pull request:
-		# cameraString = ('nvcamerasrc ! '
-		# 						'video/x-raw(memory:NVMM), '
-		# 						'width=(int)2592, height=(int)1458, '
-		# 						'format=(string)I420, framerate=(fraction)30/1 ! '
-		# 						'nvvidconv ! '
-		# 						'video/x-raw, width=(int){}, height=(int){}, '
-		# 						'format=(string)BGRx ! '
-		# 						'videoconvert ! appsink').format(width, height)
-
+		# Initialize the frame queue
+		self.q = Queue()
+		
 		# initialize the video camera stream using gstreamer and read 
 		# the first frame from the stream
 		self.stream = cv2.VideoCapture(cameraString, cv2.CAP_GSTREAMER)
@@ -83,23 +79,36 @@ class JetsonVideoStream:
 		return self
 
 	def update(self):
-		# keep looping infinitely until the thread is stopped
+        # keep looping infinitely until the thread is stopped
 		while True:
-			# if the thread indicator variable is set, stop the thread
+            # if the thread indicator variable is set, stop the thread
 			if self.stopped:
-				self.stream.release() # TODO: only if it is necessary to release after stopping, can prevent resource blocking
 				return
 
-			# otherwise, read the next frame from the stream
-			(self.grabbed, self.frame) = self.stream.read()
+            # otherwise, read the next frame from the stream
+			(self.grabbed, frame) = self.stream.read()
+
+            # If the frame was grabbed successfully, then we will add it to the queue
+			if self.grabbed:
+				if not self.q.empty():
+					try:
+						self.q.get_nowait()   # discard previous (unprocessed) frame
+					except Queue.Empty:
+						pass
+				self.q.put(frame)
+
 
 	def read(self):
 		# return the frame most recently read
-		return self.frame
+		return self.q.get()
 
 	def stop(self):
 		# indicate that the thread should be stopped
 		self.stopped = True
+		if self.stream is not None:
+			# Close the video file or capturing device
+			self.stream.release()
+			self.stream = None
 
 
 # Raspberry Pi Camera V2:
@@ -107,7 +116,7 @@ class JetsonVideoStream:
 # GStreamer supported full resolution: (3264, 2464), 21 FPS, FOV: 62 deg H, 48.8 deg V
 # Preferred resolution: (3264,1848), 28FPS, FOV: 62 deg H, 37 deg V
 class JetsonVideoStreamST:
-	def __init__(self, captureResolution=(3264,1848), outputResolution=(848, 480), frameRate=28, flipMethod=0, 
+	def __init__(self, sensorID=0, captureResolution=(3264,1848), outputResolution=(848, 480), frameRate=28, flipMethod=0, 
 						exposureTimeInMiliseconds=None, gain=None, digitalGain=None, whiteBalanceMode=1,
 						name="JetsonVideoStream"):
 		# set up the gstreamer string used to set up the camera on the jetson board
@@ -137,7 +146,7 @@ class JetsonVideoStreamST:
 
 		whiteBalanceModeString = 'wbmode=%d ' % whiteBalanceMode if whiteBalanceMode is not 1 else ''  # 0 - auto (?)
         
-		cameraString =	('nvarguscamerasrc %s%s%s! '
+		cameraString =	('nvarguscamerasrc sensor-id=%d %s%s%s ! '
                			'video/x-raw(memory:NVMM), '
                			'width=(int)%d, height=(int)%d, '
                			'format=(string)NV12, framerate=(fraction)%d/1 ! '
@@ -147,7 +156,7 @@ class JetsonVideoStreamST:
                			'videoconvert ! video/x-raw, format=(string)BGR! appsink ' # OR format=(string)I420 
 						'wait-on-eos=false drop=true max-buffers=1' 
 						# 'wait-on-eos=false drop=true max-buffers=1 -e -vvv'
-						 % (whiteBalanceModeString, gainString, exposureTimeString,
+						 % (sensorID, whiteBalanceModeString, gainString, exposureTimeString,
 						 captureWidth, captureHeight, frameRate, flipMethod, width, height) )
 		
 		print ('OpenCV Gstreamer pipeline input string: \n', cameraString)
@@ -170,10 +179,6 @@ class JetsonVideoStreamST:
 		# initialize the thread name
 		self.name = name
 
-		# initialize the variable used to indicate if the thread should
-		# be stopped
-		self.stopped = False
-
 	def start(self):
 		return self
 
@@ -183,9 +188,7 @@ class JetsonVideoStreamST:
 		return self.frame
 
 	def stop(self):
-		# indicate that the thread should be stopped
-		self.stopped = True
-		self.stream.release() 
+		self.stream.release() # release resources
 
 
 # nvarguscamerasrc parameters description

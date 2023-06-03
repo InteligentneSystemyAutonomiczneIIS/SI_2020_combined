@@ -16,15 +16,15 @@ import numpy as np
 
 inputWidth = 1280
 inputHeight = 720
-inputFrameRate = 28
+inputFrameRate = 60
 
 rescaledWidth = 848
 rescaledHeight = 480
 
-HorizontalFOV = 62
-VerticalFOV = 37
+# HorizontalFOV = 62
+# VerticalFOV = 37
 
-
+showImage = True
 
 ######## Initialization
 
@@ -36,7 +36,7 @@ input = jetson.utils.videoSource("csi://0", argv=[ # "--input-flip=rotate-180", 
 
 ######## Main loop
 frameTimes = []
-for i in range(0, 100):
+for i in range(0, 500):
     loopStart = time.time()
     image = input.Capture(format='rgb8')
     imgcvt = jetson.utils.cudaAllocMapped(width=inputWidth, height=inputHeight, format='bgr8')
@@ -50,16 +50,18 @@ for i in range(0, 100):
     #final image in proper orientation
     imageRotated = cv2.rotate(opencvImage, cv2.ROTATE_180)
 
-    # manual free memory - in theory can be skipped and handled by GarbageCollector
-    del imgcvt 
-    del image
-    del opencvImage
+    if showImage:
+        cv2.imshow("stream", opencvImage)
 
     # handle keys 
     key = cv2.waitKey(1) & 0xFF
     if key == ord('q'):
         break
 
+    # manual free memory - in theory can be skipped and handled by GarbageCollector
+    del imgcvt 
+    del image
+    del opencvImage
 
     loopEnd = time.time()
     frameTime = (loopEnd - loopStart)*1000
@@ -71,6 +73,5 @@ print("Average frametime: {}".format(np.average(frameTimes)))
     
 # cleanup
 cv2.destroyAllWindows()
-time.sleep(1.0)
-sys.exit(0)
+time.sleep(1.0) #not strictly necessary, just in case, to give GStreamer some time to clean
 
