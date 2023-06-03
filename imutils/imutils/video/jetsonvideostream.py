@@ -2,7 +2,6 @@
 from queue import Queue
 from threading import Thread
 import cv2
-import atexit
 
 
 # Raspberry Pi Camera V2:
