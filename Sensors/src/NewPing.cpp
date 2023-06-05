@@ -16,8 +16,8 @@ NewPing::NewPing(uint8_t trigger_pin, uint8_t echo_pin, unsigned int max_cm_dist
 	_triggerBit = digitalPinToBitMask(trigger_pin); // Get the port register bitmask for the trigger pin.
 	_echoBit = digitalPinToBitMask(echo_pin);       // Get the port register bitmask for the echo pin.
 
-	_triggerOutput = portOutputRegister(digitalPinToPort(trigger_pin)); // Get the output port register for the trigger pin.
-	_echoInput = portInputRegister(digitalPinToPort(echo_pin));         // Get the input port register for the echo pin.
+	_triggerOutput =  (uint8_t *) portOutputRegister(digitalPinToPort(trigger_pin)); // Get the output port register for the trigger pin.
+	_echoInput =  (uint8_t *) portInputRegister(digitalPinToPort(echo_pin));         // Get the input port register for the echo pin.
 
 	_triggerMode = (uint8_t *) portModeRegister(digitalPinToPort(trigger_pin)); // Get the port mode register for the trigger pin.
 #else
