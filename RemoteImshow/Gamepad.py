@@ -1,7 +1,7 @@
 import inputs
 import threading
 import time
-
+import importlib
 
 
 class GamepadState:
@@ -53,7 +53,11 @@ class GamepadState:
             try:
                 self.gamepad = inputs.devices.gamepads[0]
             except IndexError:
+                # the only way to detect gamepads connected after the program start is to reimport inputs lib
                 self.gamepad = None
+                self.reset_gamepad()
+                time.sleep(5)
+                importlib.reload(inputs)
 
             if self.gamepad is not None:
                 try:
@@ -147,7 +151,9 @@ class GamepadState:
 
 if __name__ == '__main__':
     gamepad_state = GamepadState()
+    time_now = time.time()
     while True:
+        time_from_start = time.time() - time_now
         axes, triggers, buttons = gamepad_state.get_state()
-        print(f"Axes: {axes}, Triggers: {triggers}, Buttons: {buttons}")
-        time.sleep(1/10)
+        print(f"Timestamp: {round(time_from_start, 2)}; Axes: {axes}, Triggers: {triggers}, Buttons: {buttons}")
+        time.sleep(1/120)

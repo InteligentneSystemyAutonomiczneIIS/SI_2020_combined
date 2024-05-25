@@ -11,6 +11,63 @@ import time
 import signal
 import sys
 
+import serial 
+
+
+
+
+class SerialCommunicator:
+    def __init__(self, port, baudrate):
+        self.port = port
+        self.baudrate = baudrate
+
+        self.ser = serial.Serial(self.port, self.baudrate, timeout=0.05)
+
+    def _calculate_checksum(self, command, data_length, data):
+        content = command + str(data_length).zfill(2) + data
+        checksum = sum(ord(ch) for ch in content) % 256
+        return f"{checksum:02X}".upper()
+
+    def _create_packet(self, command, data):
+        data_length = len(data)
+        checksum = self._calculate_checksum(command, data_length, data)
+        packet = f"<{command};{data_length:02};{data};{checksum}>"
+        return packet
+    
+
+    def sendCommand(self, commandString, dataList):
+        dataString = ','.join(map(str, dataList))  # Convert list to string with comma as delimiter
+        packet = self._create_packet(commandString, dataString)
+        binary_packet = packet.encode()
+
+        self.ser.write(binary_packet)
+
+
+
+class GamepadTeensyController:
+    def __init__(self):
+        self.gamepadType = "Xbox 360"
+        self.ser = SerialCommunicator("/dev/ttyACM0", 115200)
+
+    def parseData(self, axes, triggers, buttons):
+        steering = round(float(axes[2]), 2)
+        speed = round(float(triggers[1]) - float(triggers[0]), 2)
+        pitch = round(float(axes[1]),2)
+        yaw = round(float(axes[0]),2)
+
+        self.sendData(steering, speed, pitch, yaw)
+
+    def sendData(self, steering, speed, pitch, yaw ):
+        self.ser.sendCommand("steering", [steering])
+        self.ser.sendCommand("speed", [speed])
+        self.ser.sendCommand("servos", [pitch, yaw])
+        
+        # test data:
+        # <speed;04;0.75;3F>
+        # <servos;08;0.5,-0.5;98>
+        # <steering;05;-0.25;B8>
+
+
 
 class VideoServer:
     def __init__(self, host, video_port, gamepad_port):
@@ -24,6 +81,8 @@ class VideoServer:
         self.gamepad_clients = []
         self.received_data_queue = deque()
         self.isDebugVideoShow = False
+
+        self.teensyController = GamepadTeensyController()
 
         self.init_video_system()
         
@@ -127,7 +186,11 @@ class VideoServer:
                     triggers = gamepad_data.get("triggers", [])
                     buttons = gamepad_data.get("buttons", [])
                     print(f"Received gamepad data: Axes={axes}, Triggers={triggers}, Buttons={buttons}")
-                    self.received_data_queue.append(gamepad_data)
+                    self.teensyController.parseData(axes, triggers, buttons)
+                    
+                    # self.received_data_queue.append(gamepad_data)
+
+                    
         # except (ConnectionResetError, BrokenPipeError):
         except:
             print(f"Gamepad client disconnected")
@@ -160,5 +223,10 @@ class VideoServer:
 
         print("Resources cleaned up successfully.")
 
-# Example usage
-video_server = VideoServer('0.0.0.0', 8889, 8890)
+
+if __name__ == "__main__":
+
+
+
+    # Example usage
+    video_server = VideoServer('0.0.0.0', 8889, 8890)

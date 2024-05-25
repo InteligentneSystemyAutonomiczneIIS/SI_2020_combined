@@ -113,4 +113,5 @@ class VideoClient:
                 time.sleep(remaining_delay)
 
 # Example usage
-video_client = VideoClient('192.168.1.104', 8889, 8890)
+# video_client = VideoClient('192.168.1.104', 8889, 8890)
+video_client = VideoClient('192.168.1.23', 8889, 8890)
