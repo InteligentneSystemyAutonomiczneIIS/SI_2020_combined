@@ -1,6 +1,6 @@
 import socket
+# import numpy as np
 import cv2
-import numpy as np
 import struct
 import json
 import threading
@@ -12,7 +12,6 @@ import signal
 import sys
 
 import serial 
-
 
 
 
@@ -49,11 +48,11 @@ class GamepadTeensyController:
         self.gamepadType = "Xbox 360"
         self.ser = SerialCommunicator("/dev/ttyACM0", 115200)
 
-    def parseData(self, axes, triggers, buttons):
-        steering = round(float(axes[2]), 2)
+    def parseData(self, axes, triggers, buttons):        
+        steering = round(float(axes[0]), 2)
         speed = round(float(triggers[1]) - float(triggers[0]), 2)
-        pitch = round(float(axes[1]),2)
-        yaw = round(float(axes[0]),2)
+        pitch = -round(float(axes[3]),2)
+        yaw = round(float(axes[2]),2)
 
         self.sendData(steering, speed, pitch, yaw)
 
@@ -61,7 +60,7 @@ class GamepadTeensyController:
         self.ser.sendCommand("steering", [steering])
         self.ser.sendCommand("speed", [speed])
         self.ser.sendCommand("servos", [pitch, yaw])
-        
+    
         # test data:
         # <speed;04;0.75;3F>
         # <servos;08;0.5,-0.5;98>
@@ -220,13 +219,9 @@ class VideoServer:
         self.gamepad_socket.close()
 
         # Clean up any other resources here
-
         print("Resources cleaned up successfully.")
 
 
 if __name__ == "__main__":
-
-
-
     # Example usage
     video_server = VideoServer('0.0.0.0', 8889, 8890)

@@ -114,4 +114,4 @@ class VideoClient:
 
 # Example usage
 # video_client = VideoClient('192.168.1.104', 8889, 8890)
-video_client = VideoClient('192.168.1.23', 8889, 8890)
+video_client = VideoClient('127.0.0.1', 8889, 8890)

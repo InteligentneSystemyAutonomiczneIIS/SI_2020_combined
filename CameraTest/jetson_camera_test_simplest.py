@@ -11,7 +11,7 @@ import time
 from imutils.video import JetsonVideoStream, JetsonVideoStreamST
 import numpy as np
 import cv2
-import jetson.utils
+#import jetson.utils
 
 
 
