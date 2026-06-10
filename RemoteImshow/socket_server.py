@@ -17,6 +17,9 @@ RECV_BUFFER_SIZE = 65536
 VIDEO_TARGET_FPS = 30
 VIDEO_JPEG_QUALITY = 80
 MAX_VIDEO_PACKET_SIZE = 1300
+INVERT_PITCH_AXIS = True
+LOG_CONTROL_PACKETS = True
+CONTROL_LOG_INTERVAL_SECONDS = 0.5
 
 VIDEO_HELLO_PACKET = b"h"
 VIDEO_FRAME_PACKET_TYPE = b"v"
@@ -64,7 +67,9 @@ class GamepadTeensyController:
 
         steering = round(float(axes[0]), 2)
         speed = round(float(triggers[1]) - float(triggers[0]), 2)
-        pitch = -round(float(axes[3]), 2)
+        pitch = round(float(axes[3]), 2)
+        if INVERT_PITCH_AXIS:
+            pitch = -pitch
         yaw = round(float(axes[2]), 2)
 
         self.send_data(steering, speed, pitch, yaw)
@@ -88,8 +93,7 @@ class VideoServer:
         self.is_debug_video_show = False
         self.shutdown_event = threading.Event()
         self.video_sequence = 0
-        self.last_control_sequence = -1
-        self.last_control_sequence_lock = threading.Lock()
+        self.last_control_log_time = 0.0
 
         self.teensy_controller = GamepadTeensyController()
 
@@ -266,14 +270,22 @@ class VideoServer:
             return None
         return bytes(chunks)
 
-    def should_accept_control_sequence(self, sequence):
-        with self.last_control_sequence_lock:
-            if sequence <= self.last_control_sequence:
-                return False
-            self.last_control_sequence = sequence
-            return True
+    def maybe_log_control_packet(self, addr, sequence, axes, triggers, buttons):
+        if not LOG_CONTROL_PACKETS:
+            return
+
+        now = time.monotonic()
+        if now - self.last_control_log_time < CONTROL_LOG_INTERVAL_SECONDS:
+            return
+
+        self.last_control_log_time = now
+        print(
+            f"Accepted control seq={sequence} from {addr}: "
+            f"axes={axes} triggers={triggers} buttons={buttons}"
+        )
 
     def gamepad_communication(self, client_socket, addr):
+        last_sequence = -1
         try:
             while not self.shutdown_event.is_set():
                 header = self.recv_exactly(client_socket, CONTROL_HEADER_SIZE)
@@ -291,7 +303,7 @@ class VideoServer:
                 if payload is None:
                     break
 
-                if not self.should_accept_control_sequence(sequence):
+                if sequence <= last_sequence:
                     continue
 
                 gamepad_data = json.loads(payload.decode("utf-8"))
@@ -299,6 +311,8 @@ class VideoServer:
                 triggers = gamepad_data.get("triggers", [])
                 buttons = gamepad_data.get("buttons", [])
                 self.teensy_controller.parse_data(axes, triggers, buttons)
+                last_sequence = sequence
+                self.maybe_log_control_packet(addr, sequence, axes, triggers, buttons)
         except (ConnectionResetError, BrokenPipeError, json.JSONDecodeError, struct.error):
             pass
         finally:
