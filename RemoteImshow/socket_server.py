@@ -1,25 +1,38 @@
-import socket
-# import numpy as np
-import cv2
-import struct
 import json
+import signal
+import socket
+import struct
+import sys
 import threading
-from collections import deque
-from imutils.video import JetsonVideoStream
 import time
 
-import signal
-import sys
+import cv2
+import serial
+from imutils.video import JetsonVideoStream
 
-import serial 
 
+VIDEO_CLIENT_TIMEOUT_SECONDS = 5.0
+SOCKET_TIMEOUT_SECONDS = 1.0
+RECV_BUFFER_SIZE = 65536
+VIDEO_TARGET_FPS = 30
+VIDEO_JPEG_QUALITY = 80
+MAX_VIDEO_PACKET_SIZE = 1300
+
+VIDEO_HELLO_PACKET = b"h"
+VIDEO_FRAME_PACKET_TYPE = b"v"
+CONTROL_PACKET_TYPE = b"d"
+
+VIDEO_HEADER_FORMAT = "!cIQIHH"
+CONTROL_HEADER_FORMAT = "!cQQI"
+VIDEO_HEADER_SIZE = struct.calcsize(VIDEO_HEADER_FORMAT)
+CONTROL_HEADER_SIZE = struct.calcsize(CONTROL_HEADER_FORMAT)
+MAX_VIDEO_CHUNK_SIZE = MAX_VIDEO_PACKET_SIZE - VIDEO_HEADER_SIZE
 
 
 class SerialCommunicator:
     def __init__(self, port, baudrate):
         self.port = port
         self.baudrate = baudrate
-
         self.ser = serial.Serial(self.port, self.baudrate, timeout=0.05)
 
     def _calculate_checksum(self, command, data_length, data):
@@ -30,172 +43,267 @@ class SerialCommunicator:
     def _create_packet(self, command, data):
         data_length = len(data)
         checksum = self._calculate_checksum(command, data_length, data)
-        packet = f"<{command};{data_length:02};{data};{checksum}>"
-        return packet
-    
+        return f"<{command};{data_length:02};{data};{checksum}>"
 
-    def sendCommand(self, commandString, dataList):
-        dataString = ','.join(map(str, dataList))  # Convert list to string with comma as delimiter
-        packet = self._create_packet(commandString, dataString)
-        binary_packet = packet.encode()
-
-        self.ser.write(binary_packet)
-
+    def send_command(self, command_string, data_list):
+        data_string = ",".join(map(str, data_list))
+        packet = self._create_packet(command_string, data_string)
+        self.ser.write(packet.encode())
 
 
 class GamepadTeensyController:
     def __init__(self):
-        self.gamepadType = "Xbox 360"
-        self.ser = SerialCommunicator("/dev/ttyACM0", 115200)
+        self.gamepad_type = "Xbox 360"
+        self.serial_communicator = SerialCommunicator("/dev/ttyACM0", 115200)
 
-    def parseData(self, axes, triggers, buttons):        
+    def parse_data(self, axes, triggers, buttons):
+        del buttons
+
+        if len(axes) < 4 or len(triggers) < 2:
+            return
+
         steering = round(float(axes[0]), 2)
         speed = round(float(triggers[1]) - float(triggers[0]), 2)
-        pitch = -round(float(axes[3]),2)
-        yaw = round(float(axes[2]),2)
+        pitch = -round(float(axes[3]), 2)
+        yaw = round(float(axes[2]), 2)
 
-        self.sendData(steering, speed, pitch, yaw)
+        self.send_data(steering, speed, pitch, yaw)
 
-    def sendData(self, steering, speed, pitch, yaw ):
-        self.ser.sendCommand("steering", [steering])
-        self.ser.sendCommand("speed", [speed])
-        self.ser.sendCommand("servos", [pitch, yaw])
-    
-        # test data:
-        # <speed;04;0.75;3F>
-        # <servos;08;0.5,-0.5;98>
-        # <steering;05;-0.25;B8>
-
+    def send_data(self, steering, speed, pitch, yaw):
+        self.serial_communicator.send_command("steering", [steering])
+        self.serial_communicator.send_command("speed", [speed])
+        self.serial_communicator.send_command("servos", [pitch, yaw])
 
 
 class VideoServer:
     def __init__(self, host, video_port, gamepad_port):
-        self.usingJetson = True
+        self.using_jetson = True
         self.host = host
         self.video_port = video_port
         self.gamepad_port = gamepad_port
         self.video_socket = None
         self.gamepad_socket = None
-        self.video_clients = []
-        self.gamepad_clients = []
-        self.received_data_queue = deque()
-        self.isDebugVideoShow = False
+        self.video_clients = {}
+        self.video_clients_lock = threading.Lock()
+        self.is_debug_video_show = False
+        self.shutdown_event = threading.Event()
+        self.video_sequence = 0
+        self.last_control_sequence = -1
+        self.last_control_sequence_lock = threading.Lock()
 
-        self.teensyController = GamepadTeensyController()
+        self.teensy_controller = GamepadTeensyController()
 
         self.init_video_system()
-        
         self.start_server()
 
-        # Set up signal handlers
         signal.signal(signal.SIGINT, self.signal_handler)
         signal.signal(signal.SIGTERM, self.signal_handler)
 
-        # Keep the main thread alive
         self.keep_alive()
 
     def keep_alive(self):
-        while True:
+        while not self.shutdown_event.is_set():
             time.sleep(1)
 
-
     def init_video_system(self):
-        if self.usingJetson:
-            width = 848
-            height = 480
-            frameResolution = (width, height)
-            self.video_capture = JetsonVideoStream(outputResolution=frameResolution).start()
+        if self.using_jetson:
+            frame_resolution = (848, 480)
+            self.video_capture = JetsonVideoStream(outputResolution=frame_resolution).start()
             time.sleep(2)
         else:
             self.video_capture = cv2.VideoCapture(0, cv2.CAP_DSHOW)
 
-
     def start_server(self):
-        self.video_socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+        self.video_socket = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+        self.video_socket.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
+        self.video_socket.settimeout(SOCKET_TIMEOUT_SECONDS)
         self.video_socket.bind((self.host, self.video_port))
-        self.video_socket.listen(5)
-        print(f"Video server listening on {self.host}:{self.video_port}")
+        print(f"Video UDP server listening on {self.host}:{self.video_port}")
 
         self.gamepad_socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+        self.gamepad_socket.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
+        self.gamepad_socket.settimeout(SOCKET_TIMEOUT_SECONDS)
         self.gamepad_socket.bind((self.host, self.gamepad_port))
         self.gamepad_socket.listen(5)
-        print(f"Gamepad server listening on {self.host}:{self.gamepad_port}")
+        print(f"Gamepad TCP server listening on {self.host}:{self.gamepad_port}")
 
-        video_thread = threading.Thread(target=self.handle_video_clients, daemon=True)
-        gamepad_thread = threading.Thread(target=self.handle_gamepad_clients, daemon=True)
-        video_thread.start()
-        gamepad_thread.start()
+        threading.Thread(target=self.handle_video_clients, daemon=True).start()
+        threading.Thread(target=self.video_streaming_loop, daemon=True).start()
+        threading.Thread(target=self.handle_gamepad_clients, daemon=True).start()
 
     def handle_video_clients(self):
-        while True:
-            client_socket, addr = self.video_socket.accept()
-            print(f"Video client connected from {addr}")
-            client_thread = threading.Thread(target=self.video_streaming, args=(client_socket,), daemon=True)
-            client_thread.start()
-            self.video_clients.append(client_socket)
+        while not self.shutdown_event.is_set():
+            try:
+                data, addr = self.video_socket.recvfrom(RECV_BUFFER_SIZE)
+            except socket.timeout:
+                self.prune_video_clients()
+                continue
+            except OSError:
+                break
+
+            if data != VIDEO_HELLO_PACKET:
+                continue
+
+            with self.video_clients_lock:
+                is_new_client = addr not in self.video_clients
+                self.video_clients[addr] = time.monotonic()
+
+            if is_new_client:
+                print(f"Video client registered from {addr}")
+
+    def prune_video_clients(self):
+        now = time.monotonic()
+        with self.video_clients_lock:
+            expired_clients = [
+                addr
+                for addr, last_seen in self.video_clients.items()
+                if now - last_seen > VIDEO_CLIENT_TIMEOUT_SECONDS
+            ]
+            for addr in expired_clients:
+                self.video_clients.pop(addr, None)
+
+    def video_streaming_loop(self):
+        encode_params = [cv2.IMWRITE_JPEG_QUALITY, VIDEO_JPEG_QUALITY]
+        target_period = 1.0 / VIDEO_TARGET_FPS
+        next_send_time = time.perf_counter()
+
+        while not self.shutdown_event.is_set():
+            frame = self.video_capture.read()
+            if frame is None:
+                time.sleep(0.01)
+                continue
+
+            if self.is_debug_video_show:
+                cv2.imshow("frame", frame)
+                cv2.waitKey(1)
+
+            success, encoded_frame = cv2.imencode(".jpg", frame, encode_params)
+            if not success:
+                continue
+
+            self.send_video_frame(encoded_frame.tobytes())
+
+            next_send_time += target_period
+            remaining_delay = next_send_time - time.perf_counter()
+            if remaining_delay > 0:
+                time.sleep(remaining_delay)
+            else:
+                next_send_time = time.perf_counter()
+
+    def send_video_frame(self, frame_bytes):
+        with self.video_clients_lock:
+            client_addresses = list(self.video_clients.keys())
+
+        if not client_addresses or not frame_bytes:
+            return
+
+        self.video_sequence += 1
+        frame_sequence = self.video_sequence
+        send_timestamp_ns = time.time_ns()
+        frame_size = len(frame_bytes)
+        chunk_count = max(1, (frame_size + MAX_VIDEO_CHUNK_SIZE - 1) // MAX_VIDEO_CHUNK_SIZE)
+        disconnected_clients = set()
+
+        for chunk_index in range(chunk_count):
+            start = chunk_index * MAX_VIDEO_CHUNK_SIZE
+            end = min(start + MAX_VIDEO_CHUNK_SIZE, frame_size)
+            payload = frame_bytes[start:end]
+            header = struct.pack(
+                VIDEO_HEADER_FORMAT,
+                VIDEO_FRAME_PACKET_TYPE,
+                frame_sequence,
+                send_timestamp_ns,
+                frame_size,
+                chunk_index,
+                chunk_count,
+            )
+            packet = header + payload
+
+            for addr in client_addresses:
+                if addr in disconnected_clients:
+                    continue
+                try:
+                    self.video_socket.sendto(packet, addr)
+                except OSError:
+                    disconnected_clients.add(addr)
+
+        if disconnected_clients:
+            with self.video_clients_lock:
+                for addr in disconnected_clients:
+                    self.video_clients.pop(addr, None)
 
     def handle_gamepad_clients(self):
-        while True:
-            client_socket, addr = self.gamepad_socket.accept()
+        while not self.shutdown_event.is_set():
+            try:
+                client_socket, addr = self.gamepad_socket.accept()
+            except socket.timeout:
+                continue
+            except OSError:
+                break
+
+            client_socket.settimeout(SOCKET_TIMEOUT_SECONDS)
+            client_socket.setsockopt(socket.IPPROTO_TCP, socket.TCP_NODELAY, 1)
             print(f"Gamepad client connected from {addr}")
-            client_thread = threading.Thread(target=self.gamepad_communication, args=(client_socket,), daemon=True)
-            client_thread.start()
-            self.gamepad_clients.append(client_socket)
+            threading.Thread(
+                target=self.gamepad_communication,
+                args=(client_socket, addr),
+                daemon=True,
+            ).start()
 
+    def recv_exactly(self, client_socket, size):
+        chunks = bytearray()
+        while len(chunks) < size and not self.shutdown_event.is_set():
+            try:
+                chunk = client_socket.recv(size - len(chunks))
+            except socket.timeout:
+                continue
 
-    def video_streaming(self, client_socket):
+            if not chunk:
+                return None
+            chunks.extend(chunk)
+
+        if len(chunks) < size:
+            return None
+        return bytes(chunks)
+
+    def should_accept_control_sequence(self, sequence):
+        with self.last_control_sequence_lock:
+            if sequence <= self.last_control_sequence:
+                return False
+            self.last_control_sequence = sequence
+            return True
+
+    def gamepad_communication(self, client_socket, addr):
         try:
-            while True:
-                # Capture frame from the camera
-                frame = self.video_capture.read()
-
-                if frame is None:
+            while not self.shutdown_event.is_set():
+                header = self.recv_exactly(client_socket, CONTROL_HEADER_SIZE)
+                if not header:
                     break
 
-                # Encode the frame as JPEG
-                _, encoded_frame = cv2.imencode('.jpg', frame)
-
-                if self.isDebugVideoShow:
-                    cv2.imshow('frame', frame)
-                    cv2.waitKey(1)
-
-                data_type = b'v'
-                frame_size = len(encoded_frame)
-                packet = data_type + struct.pack("!Q", frame_size) + encoded_frame.tobytes()
-                client_socket.sendall(packet)
-        # except (ConnectionResetError, BrokenPipeError):
-        except:
-            print(f"Video client disconnected")
-            self.video_clients.remove(client_socket)
-            client_socket.close()
-
-    def gamepad_communication(self, client_socket):
-        try:
-            while True:
-                data = client_socket.recv(1024)
-                if not data:
+                packet_type, sequence, _timestamp_ns, payload_size = struct.unpack(
+                    CONTROL_HEADER_FORMAT,
+                    header,
+                )
+                if packet_type != CONTROL_PACKET_TYPE:
                     break
 
-                data_type = data[0:1]
-                if data_type == b'd':
-                    data_length = struct.unpack("!Q", data[1:9])[0]
-                    encoded_data = data[9:9 + data_length]
-                    gamepad_data = json.loads(encoded_data.decode())
-                    axes = gamepad_data.get("axes", [])
-                    triggers = gamepad_data.get("triggers", [])
-                    buttons = gamepad_data.get("buttons", [])
-                    print(f"Received gamepad data: Axes={axes}, Triggers={triggers}, Buttons={buttons}")
-                    self.teensyController.parseData(axes, triggers, buttons)
-                    
-                    # self.received_data_queue.append(gamepad_data)
+                payload = self.recv_exactly(client_socket, payload_size)
+                if payload is None:
+                    break
 
-                    
-        # except (ConnectionResetError, BrokenPipeError):
-        except:
-            print(f"Gamepad client disconnected")
-            self.gamepad_clients.remove(client_socket)
+                if not self.should_accept_control_sequence(sequence):
+                    continue
+
+                gamepad_data = json.loads(payload.decode("utf-8"))
+                axes = gamepad_data.get("axes", [])
+                triggers = gamepad_data.get("triggers", [])
+                buttons = gamepad_data.get("buttons", [])
+                self.teensy_controller.parse_data(axes, triggers, buttons)
+        except (ConnectionResetError, BrokenPipeError, json.JSONDecodeError, struct.error):
+            pass
+        finally:
+            print(f"Gamepad client disconnected from {addr}")
             client_socket.close()
-
 
     def signal_handler(self, sig, frame):
         print(f"Received signal {sig}, cleaning up resources...")
@@ -203,25 +311,22 @@ class VideoServer:
         sys.exit(0)
 
     def cleanup_resources(self):
-        # Close video capture
-        if self.usingJetson:
+        self.shutdown_event.set()
+
+        if self.using_jetson:
             self.video_capture.stop()
         else:
             self.video_capture.release()
 
-        # Close sockets
-        for client_socket in self.video_clients:
-            client_socket.close()
-        self.video_socket.close()
+        if self.video_socket is not None:
+            self.video_socket.close()
 
-        for client_socket in self.gamepad_clients:
-            client_socket.close()
-        self.gamepad_socket.close()
+        if self.gamepad_socket is not None:
+            self.gamepad_socket.close()
 
-        # Clean up any other resources here
+        cv2.destroyAllWindows()
         print("Resources cleaned up successfully.")
 
 
 if __name__ == "__main__":
-    # Example usage
-    video_server = VideoServer('0.0.0.0', 8889, 8890)
+    VideoServer("0.0.0.0", 8889, 8890)
